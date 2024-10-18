@@ -3,6 +3,8 @@ package com.github.fanpan26;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
+import org.tio.cluster.TioClusterConfig;
+import org.tio.cluster.redisson.RedissonTioClusterTopic;
 import org.tio.core.DefaultTioUuid;
 import org.tio.core.intf.GroupListener;
 import org.tio.core.intf.TioUuid;
@@ -43,6 +45,8 @@ public class TioWebSocketServerBootstrap {
 
     private ServerTioConfig tioConfig;
 
+    private TioClusterConfig clusterConfig;
+
     public final ServerTioConfig getServerTioConfig() {
         return tioConfig;
     }
@@ -71,7 +75,22 @@ public class TioWebSocketServerBootstrap {
         initRequiredBeans();
 
         initServerStarter();
+        initClusterConfig();
         initServerTioConfig();
+    }
+
+    private void initClusterConfig() {
+        RedissonTioClusterTopic redissonTioClusterTopic = getBean(RedissonTioClusterTopic.class);
+        TioWebSocketServerClusterProperties clusterProperties = getBean(TioWebSocketServerClusterProperties.class);
+        if (redissonTioClusterTopic != null && clusterProperties.isEnable()) {
+            this.clusterConfig = new TioClusterConfig(redissonTioClusterTopic);
+            this.clusterConfig.setCluster4all(clusterProperties.isAll());
+            this.clusterConfig.setCluster4bsId(true);
+            this.clusterConfig.setCluster4channelId(clusterProperties.isChannel());
+            this.clusterConfig.setCluster4group(clusterProperties.isGroup());
+            this.clusterConfig.setCluster4ip(clusterProperties.isIp());
+            this.clusterConfig.setCluster4user(clusterProperties.isUser());
+        }
     }
 
     private void initWsConfig() {
@@ -80,13 +99,11 @@ public class TioWebSocketServerBootstrap {
     }
 
     private void initServerStarter() throws IOException {
-
         serverStarter = new WsServerStarter(config,
                 msgHandler,
                 uuid,
                 Threads.getTioExecutor(),
                 Threads.getGroupExecutor());
-
     }
 
     private void initOptionalBeans() {
@@ -146,6 +163,9 @@ public class TioWebSocketServerBootstrap {
         if (properties.useSSL()) {
             TioWebSocketServerProperties.SslProperties ssl = properties.getSsl();
             tioConfig.setSslConfig(SslConfig.forServer(ssl.getKeyStore(), ssl.getTrustStore(), ssl.getPassword()));
+        }
+        if(clusterConfig != null) {
+            tioConfig.setTioClusterConfig(clusterConfig);
         }
 
         applicationListener.onConfiguration(tioConfig);
